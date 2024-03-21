@@ -10,8 +10,43 @@ def extract():
     extract data from sql-db
     :return:
     """
-    connection = sqlite3.connect("db.sqlite")
-    cursor = connection.cursor()
+    with sqlite3.connect("db.sqlite") as connection:
+        cursor = connection.cursor()
+        cursor.execute("""SELECT 
+                                name
+                            FROM 
+                                sqlite_schema
+                            WHERE 
+                                type ='table' 
+                            AND 
+                                name 
+                            IN ('movies',
+                                'movie_actors', 
+                                'actors', 
+                                'writers');""")
+        tables = cursor.fetchall()
+        for table in tables:
+            cursor.execute(f"SELECT * FROM {table[0]} LIMIT 1")
+            #print(table[0],cursor.fetchall())
+
+        cursor.execute("""SELECT m.name as tableName, 
+                               p.name as columnName
+                        FROM sqlite_master m
+                        left outer join pragma_table_info((m.name)) p
+                             on m.name <> p.name
+                        WHERE tableName IN ('movies',
+                                            'movie_actors', 
+                                            'actors', 
+                                            'writers')     
+                        order by tableName, columnName
+                        ;""")
+        # print(cursor.fetchall())
+        # cursor.execute('pragma table_info(movies)')
+        # print(cursor.fetchall())
+        #
+        # for one_table in cursor.fetchall():
+        #     print(one_table[1])
+
 
     # Наверняка это пилится в один sql - запрос, но мне как-то лениво)
 
@@ -27,15 +62,18 @@ def extract():
                 where movie_id = movies.id
             )
         ),
-        
+
         max(writer, writers)
         from movies
     """)
 
     raw_data = cursor.fetchall()
-
+    print("raw_data"*80)
+    #print(raw_data)
+    print("raw_data" * 80)
     # cursor.execute('pragma table_info(movies)')
     # pprint(cursor.fetchall())
+
 
     # Нужны для соответсвия идентификатора и человекочитаемого названия
     actors = {row[0]: row[1] for row in cursor.execute('select * from actors where name != "N/A"')}
@@ -106,16 +144,19 @@ def transform(__actors, __writers, __raw_data):
 
     return documents_list
 
+
 def load(acts):
     """
 
     :param acts:
     :return:
     """
-    es = Elasticsearch([{'host': '192.168.1.252', 'port': 9200}])
+    es = Elasticsearch([{'host': '10.1.0.39', 'port': 9200,'scheme': "http"}])
+
     bulk(es, acts)
 
     return True
+
 
 if __name__ == '__main__':
     load(transform(*extract()))
